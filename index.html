@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>El-General: المحاكاة الاستراتيجية العالمية</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            hud: {
+              bg: 'rgba(5, 11, 24, 0.95)',
+              border: 'rgba(56, 189, 248, 0.35)',
+              glow: '#06b6d4',
+              gold: '#f59e0b',
+              danger: '#ef4444',
+              success: '#10b981'
+            }
+          },
+          fontFamily: {
+            cairo: ['Cairo', 'sans-serif'],
+            tajawal: ['Tajawal', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    * { user-select: none; -webkit-user-select: none; box-sizing: border-box; }
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Cairo', 'Tajawal', sans-serif; background-color: #020617; color: #f8fafc; }
+    #map { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; background: #020617; }
+    
+    .glass-hud {
+      background: rgba(6, 13, 27, 0.94);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+    }
+
+    .command-btn { transition: all 0.2s ease-in-out; cursor: pointer; }
+    .command-btn:hover { transform: translateY(-2px); border-color: #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.4); }
+
+    /* MOBILE SPECIFIC OVERRIDES */
+    body.device-mobile .hud-card {
+      padding: 0.25rem 0.5rem !important;
+      font-size: 0.7rem !important;
+    }
+    body.device-mobile .hud-title {
+      font-size: 0.85rem !important;
+    }
+    body.device-mobile .bottom-dock {
+      flex-wrap: wrap !important;
+      justify-content: center !important;
+    }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.4); border-radius: 4px; }
+    
+    .attack-line { stroke-dasharray: 8; animation: dash 1s linear infinite; }
+    @keyframes dash { to { stroke-dashoffset: -16; } }
+  </style>
+</head>
+<body class="relative w-full h-full device-pc">
+
+  <!-- MAP -->
+  <div id="map"></div>
+
+  <!-- AUTHENTICATION & DEVICE SELECTION MODAL -->
+  <div id="auth-modal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-2xl flex items-center justify-center p-4">
+    <div class="glass-hud p-6 rounded-3xl max-w-md w-full border border-cyan-500/50 shadow-2xl text-center space-y-5">
+      <div class="w-16 h-16 rounded-2xl bg-cyan-500/20 border border-cyan-400 mx-auto flex items-center justify-center text-cyan-300 text-3xl">
+        <i class="fa-solid fa-user-shield"></i>
+      </div>
+      <div>
+        <h2 class="text-2xl font-black text-white">El-General</h2>
+        <p class="text-xs text-cyan-300 font-bold mt-1">المحاكاة الاستراتيجية القومية - اختر نظام الجهاز واسم القائد</p>
+      </div>
+
+      <div class="space-y-3 text-right text-xs">
+        <div>
+          <label class="font-bold text-slate-300 mb-1 block"><i class="fa-solid fa-user ml-1 text-cyan-400"></i> اسم القائد / الرئيس:</label>
+          <input type="text" id="auth-username" value="الجنرال" placeholder="أدخل اسمك..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-slate-200 outline-none focus:border-cyan-400" />
+        </div>
+
+        <div>
+          <label class="font-bold text-slate-300 mb-1 block"><i class="fa-solid fa-mobile-screen ml-1 text-amber-400"></i> اختار نظام التشغيل / نوع الجهاز:</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" id="dev-btn-mobile" onclick="selectDeviceType('mobile')" class="py-2.5 rounded-xl border border-amber-500/50 bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center gap-2">
+              <i class="fa-solid fa-mobile-button text-base"></i> هاتف ذكي
+            </button>
+            <button type="button" id="dev-btn-pc" onclick="selectDeviceType('pc')" class="py-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-400 font-bold flex items-center justify-center gap-2">
+              <i class="fa-solid fa-desktop text-base"></i> كمبيوتر / لاب توب
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button onclick="handleAuthSubmit()" class="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-extrabold text-sm rounded-xl shadow-lg flex items-center justify-center gap-2">
+        <span>استرجاع التقدم ودخول المقر</span><i class="fa-solid fa-arrow-left"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- SETUP BANNER -->
+  <div id="setup-banner" class="fixed top-5 left-1/2 -translate-x-1/2 z-40 glass-hud px-6 py-4 rounded-3xl border border-amber-500 shadow-2xl text-center max-w-lg w-11/12 animate-bounce hidden">
+    <h2 class="text-sm font-black text-amber-300">حدد دولتتك من الخريطة مباشرة!</h2>
+    <p class="text-[11px] text-slate-300">انقر على أي دولة على الخريطة لتستلم مقاليد الحكم والرئاسة فيها.</p>
+  </div>
+
+  <!-- SETUP MODAL -->
+  <div id="setup-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="glass-hud p-6 rounded-3xl max-w-md w-full border border-cyan-500/50 shadow-2xl text-center space-y-4">
+      <h2 class="text-xl font-black text-white mb-1">تأكيد قيادة الدولة</h2>
+      <p id="setup-selected-country-text" class="text-xs text-cyan-300 font-bold">اخترت إقليم</p>
+      <input type="text" id="setup-country-name" value="الجمهورية الكبرى" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 outline-none" />
+      <div class="flex gap-2">
+        <button onclick="cancelSetupSelection()" class="w-1/3 py-2.5 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl">إلغاء</button>
+        <button onclick="confirmSetup()" class="w-2/3 py-2.5 bg-emerald-600 text-white font-extrabold text-xs rounded-xl">استلام السلطة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAX COLLECTOR -->
+  <button id="tax-collector-btn" onclick="openTaxCollectorBanner()" class="fixed left-4 top-24 z-30 glass-hud p-2.5 rounded-2xl border-2 border-amber-400 text-amber-300 shadow-2xl flex items-center gap-2 hidden">
+    <i class="fa-solid fa-sack-dollar text-xl text-amber-400 animate-pulse"></i>
+    <div class="text-right">
+      <div class="text-[9px] text-amber-200 font-bold">محصل الضرائب</div>
+      <div id="tax-btn-amount" class="text-xs font-black text-amber-300 font-mono">$0</div>
+    </div>
+  </button>
+
+  <div id="tax-collector-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center p-4">
+    <div class="glass-hud p-6 rounded-3xl max-w-md w-full border border-amber-500/50 shadow-2xl space-y-4 text-center">
+      <h2 class="text-xl font-black text-white">محصل الضرائب القومي</h2>
+      <div class="bg-slate-900 p-4 rounded-2xl border border-amber-500/30 text-right space-y-2">
+        <div class="flex justify-between text-xs text-slate-300"><span>الضرائب المتراكمة:</span><span id="tax-collector-total-text" class="font-bold text-amber-300">$0</span></div>
+        <input type="range" id="tax-slider" min="0" max="0" value="0" oninput="syncTaxSliderValue(this.value)" class="w-full accent-amber-500" />
+        <input type="number" id="tax-custom-input" min="0" value="0" oninput="syncTaxInputValue(this.value)" class="w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3 py-1.5 text-white text-sm outline-none" />
+      </div>
+      <div class="flex gap-2">
+        <button onclick="closeTaxCollectorBanner()" class="w-1/3 py-2.5 bg-slate-800 text-slate-300 font-bold text-xs rounded-xl">إلغاء</button>
+        <button onclick="confirmCollectTaxes()" class="w-2/3 py-2.5 bg-amber-600 text-slate-950 font-black text-xs rounded-xl">توريد الخزينة</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HUD LAYER -->
+  <div id="hud-layer" class="relative z-20 w-full h-full pointer-events-none flex flex-col justify-between p-2 md:p-4 hidden">
+    
+    <!-- TOP BAR FLEXIBLE RESPONSIVE HUD -->
+    <header class="pointer-events-auto w-full glass-hud rounded-2xl px-3 py-2 flex flex-col md:flex-row items-center justify-between gap-2 border border-hud-border shadow-2xl">
+      <div class="flex items-center gap-2.5 w-full md:w-auto justify-between md:justify-start">
+        <div class="flex items-center gap-2">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-900 border border-emerald-400 flex items-center justify-center text-emerald-300 text-lg font-black"><i class="fa-solid fa-star"></i></div>
+          <div>
+            <h1 class="hud-title text-xs font-black text-amber-400">EL-GENERAL</h1>
+            <h2 id="hud-nation-name" class="hud-title text-xs md:text-sm font-black text-white">الجمهورية الكبرى</h2>
+            <p id="hud-leader-title" class="text-[9px] text-cyan-300 font-bold">الجنرال</p>
+          </div>
+        </div>
+        <button onclick="toggleMobileResources()" class="md:hidden text-xs bg-slate-800 px-2.5 py-1 rounded-lg text-cyan-300 border border-slate-700">
+          <i class="fa-solid fa-sliders"></i> الموارد
+        </button>
+      </div>
+
+      <!-- RESOURCE CARDS CONTAINER -->
+      <div id="hud-resources-box" class="flex flex-wrap md:flex-nowrap items-center gap-1.5 text-[11px] w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+        <div class="hud-card bg-slate-900/90 px-2 py-1 rounded-xl border border-amber-500/40"><span class="text-[8px] text-slate-400 block">الخزينة</span><span id="hud-budget" class="font-black text-amber-300">$500,000</span></div>
+        <div class="hud-card bg-slate-900/90 px-2 py-1 rounded-xl border border-slate-500/40"><span class="text-[8px] text-slate-400 block">الصلب</span><span id="hud-steel" class="font-bold text-slate-200">100 طن</span></div>
+        <div class="hud-card bg-slate-900/90 px-2 py-1 rounded-xl border border-gray-400/40"><span class="text-[8px] text-slate-400 block">الخرسانة</span><span id="hud-concrete" class="font-bold text-slate-300">100 طن</span></div>
+        <div class="hud-card bg-slate-900/90 px-2 py-1 rounded-xl border border-amber-800/40"><span class="text-[8px] text-slate-400 block">الخشب</span><span id="hud-wood" class="font-bold text-amber-400">100 طن</span></div>
+        <div class="hud-card bg-slate-900/90 px-2 py-1 rounded-xl border border-emerald-500/40"><span class="text-[8px] text-slate-400 block">اليورانيوم</span><span id="hud-uranium" class="font-bold text-emerald-300">10 كجم</span></div>
+        <div class="hud-card bg-slate-900/90 px-2 py-1 rounded-xl border border-yellow-600/40"><span class="text-[8px] text-slate-400 block">النفط</span><span id="hud-oil" class="font-bold text-yellow-400">200 برميل</span></div>
+        <div class="hud-card bg-slate-900/90 px-2 py-1 rounded-xl border border-red-500/40"><span class="text-[8px] text-slate-400 block">الصواريخ</span><span id="hud-missiles" class="font-bold text-red-400">0</span></div>
+        <div class="hud-card bg-slate-900/90 px-2 py-1 rounded-xl border border-cyan-500/30"><span class="text-[8px] text-slate-400 block">الجيش</span><span id="hud-army" class="font-bold text-cyan-300">550</span></div>
+      </div>
+    </header>
+
+    <!-- DOCK BUTTONS -->
+    <div class="flex-1 flex justify-between items-end my-2 gap-2 pointer-events-none">
+      <div class="pointer-events-auto flex flex-col gap-2 items-start w-full md:w-auto">
+        <div class="bottom-dock glass-hud p-1.5 rounded-2xl border border-cyan-500/40 flex items-center gap-1.5 shadow-2xl w-full md:w-auto overflow-x-auto">
+          <button onclick="openProductionPage()" class="command-btn px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl flex items-center gap-1.5 text-xs font-bold text-slate-200 shrink-0"><i class="fa-solid fa-industry text-amber-400"></i> المباني</button>
+          <button onclick="openMilitaryModal()" class="command-btn px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl flex items-center gap-1.5 text-xs font-bold text-slate-200 shrink-0"><i class="fa-solid fa-jet-fighter-up text-red-400"></i> الترسانة والجيش</button>
+          <button onclick="openMarketModal()" class="command-btn px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl flex items-center gap-1.5 text-xs font-bold text-slate-200 shrink-0"><i class="fa-solid fa-chart-line text-emerald-400"></i> البورصة</button>
+          <button onclick="openInboxModal()" class="command-btn px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl flex items-center gap-1.5 text-xs font-bold text-slate-200 shrink-0"><i class="fa-solid fa-envelope text-amber-400"></i> الرسائل</button>
+          <button onclick="openEspionageModal()" class="command-btn px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl flex items-center gap-1.5 text-xs font-bold text-slate-200 shrink-0"><i class="fa-solid fa-user-secret text-purple-400"></i> الاستخبارات</button>
+        </div>
+      </div>
+
+      <!-- INSPECTOR -->
+      <div class="pointer-events-auto flex flex-col gap-2 items-end hidden md:flex">
+        <div id="country-inspector" class="glass-hud rounded-2xl p-3 w-72 border border-cyan-500/40 shadow-2xl hidden">
+          <h3 id="inspect-country-name" class="font-extrabold text-sm text-white mb-1"><i class="fa-solid fa-globe text-cyan-400"></i> -</h3>
+          <div class="space-y-1 text-[11px] text-slate-300">
+            <div>السكان: <span id="inspect-pop" class="text-emerald-300 font-bold">-</span></div>
+            <div>الميزانية: <span id="inspect-gdp" class="text-amber-300 font-bold">-</span></div>
+            <div>القوة العسكرية: <span id="inspect-military" class="text-red-400 font-bold">-</span></div>
+          </div>
+          <div class="grid grid-cols-2 gap-1.5 mt-2">
+            <button onclick="openHelpModal()" class="py-1.5 bg-emerald-600 text-white font-bold text-[11px] rounded-lg">مساعدات</button>
+            <button onclick="openAttackModal()" class="py-1.5 bg-red-600 text-white font-bold text-[11px] rounded-lg">قصف</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUILDINGS MODAL -->
+  <div id="production-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex-col p-4 md:p-8 overflow-y-auto">
+    <div class="max-w-4xl w-full mx-auto space-y-4">
+      <div class="flex justify-between items-center border-b border-cyan-500/30 pb-3">
+        <h2 class="text-xl font-black text-white flex items-center gap-2"><i class="fa-solid fa-industry text-amber-400"></i> المجمع الصناعي وبناء المصانع</h2>
+        <button onclick="closeProductionPage()" class="px-3 py-1.5 bg-slate-800 text-white font-bold rounded-xl text-xs">إغلاق</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-hud rounded-2xl p-3 border border-amber-800 space-y-2">
+          <h3 class="text-sm font-black text-amber-400">مصنع الخشب</h3>
+          <p class="text-[11px] text-slate-300">المستوى: <span id="lvl-wood">0</span></p>
+          <button onclick="upgradeBuilding('wood', 30000)" class="w-full py-1.5 bg-amber-800 text-white font-bold rounded-xl text-xs">بناء / تطوير ($30,000)</button>
+        </div>
+        <div class="glass-hud rounded-2xl p-3 border border-slate-500 space-y-2">
+          <h3 class="text-sm font-black text-slate-200">مصنع الخرسانة</h3>
+          <p class="text-[11px] text-slate-300">المستوى: <span id="lvl-concrete">0</span></p>
+          <button onclick="upgradeBuilding('concrete', 50000)" class="w-full py-1.5 bg-slate-700 text-white font-bold rounded-xl text-xs">بناء / تطوير ($50,000)</button>
+        </div>
+        <div class="glass-hud rounded-2xl p-3 border border-slate-400 space-y-2">
+          <h3 class="text-sm font-black text-slate-300">مصنع سبائك الصلب</h3>
+          <p class="text-[11px] text-slate-300">المستوى: <span id="lvl-steel">0</span></p>
+          <button onclick="upgradeBuilding('steel', 80000)" class="w-full py-1.5 bg-slate-600 text-white font-bold rounded-xl text-xs">بناء / تطوير ($80,000)</button>
+        </div>
+        <div class="glass-hud rounded-2xl p-3 border border-emerald-500 space-y-2">
+          <h3 class="text-sm font-black text-emerald-400">المفاعل النووي (يورانيوم)</h3>
+          <p class="text-[11px] text-slate-300">المستوى: <span id="lvl-uranium">0</span></p>
+          <button onclick="upgradeBuilding('uranium', 250000)" class="w-full py-1.5 bg-emerald-700 text-white font-bold rounded-xl text-xs">بناء / تطوير ($250,000)</button>
+        </div>
+        <div class="glass-hud rounded-2xl p-3 border border-yellow-600 space-y-2">
+          <h3 class="text-sm font-black text-yellow-400">مصفاة النفط الكبرى</h3>
+          <p class="text-[11px] text-slate-300">المستوى: <span id="lvl-oil">0</span></p>
+          <button onclick="upgradeBuilding('oil', 150000)" class="w-full py-1.5 bg-yellow-700 text-white font-bold rounded-xl text-xs">بناء / تطوير ($150,000)</button>
+        </div>
+        <div class="glass-hud rounded-2xl p-3 border border-cyan-500 space-y-2">
+          <h3 class="text-sm font-black text-cyan-300">منظومة الدفاع S-400</h3>
+          <p class="text-[11px] text-slate-300">الحماية: <span id="lvl-airdef">0</span></p>
+          <button onclick="upgradeAirDefense()" class="w-full py-1.5 bg-cyan-700 text-white font-bold rounded-xl text-xs">تركيب المنظومة ($300,000)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MILITARY MODAL -->
+  <div id="military-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex-col p-4 md:p-8 overflow-y-auto">
+    <div class="max-w-4xl w-full mx-auto space-y-4">
+      <div class="flex justify-between items-center border-b border-red-500/30 pb-3">
+        <h2 class="text-xl font-black text-white flex items-center gap-2"><i class="fa-solid fa-jet-fighter-up text-red-500"></i> الترسانة والجيش (مركز القيادة)</h2>
+        <button onclick="closeMilitaryModal()" class="px-3 py-1.5 bg-slate-800 text-white font-bold rounded-xl text-xs">إغلاق</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-hud rounded-2xl p-4 border border-red-500/40 space-y-2">
+          <h3 class="text-sm font-black text-white">تجنيد جنود مشاة</h3>
+          <p class="text-[11px] text-slate-300">التكلفة: $10,000 (+100 جندي)</p>
+          <button onclick="recruitUnit('infantry', 10000, 100)" class="w-full py-1.5 bg-red-600 text-white font-bold rounded-xl text-xs">تجنيد مشاة</button>
+        </div>
+        <div class="glass-hud rounded-2xl p-4 border border-red-500/40 space-y-2">
+          <h3 class="text-sm font-black text-white">تصنيع صواريخ تكتيكية</h3>
+          <p class="text-[11px] text-slate-300">التكلفة: $100,000 | 50 صلب</p>
+          <button onclick="produceTacticalMissiles()" class="w-full py-1.5 bg-rose-600 text-white font-bold rounded-xl text-xs">إنتاج صاروخ</button>
+        </div>
+        <div class="glass-hud rounded-2xl p-4 border border-blue-500/40 space-y-2">
+          <h3 class="text-sm font-black text-blue-300">تدشين سفينة حربية</h3>
+          <p class="text-[11px] text-slate-300">التكلفة: $150,000 | 80 صلب</p>
+          <button onclick="recruitWarships()" class="w-full py-1.5 bg-blue-600 text-white font-bold rounded-xl text-xs">تدشين أسطول</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MARKET MODAL -->
+  <div id="market-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex-col p-4 md:p-8 overflow-y-auto">
+    <div class="max-w-3xl w-full mx-auto space-y-4 my-auto">
+      <div class="flex justify-between items-center border-b border-emerald-500/40 pb-3">
+        <h2 class="text-lg font-black text-white flex items-center gap-2"><i class="fa-solid fa-chart-line text-emerald-400"></i> سوق البورصة والتجارة</h2>
+        <button onclick="closeMarketModal()" class="px-3 py-1.5 bg-slate-800 text-white font-bold rounded-xl text-xs">إغلاق</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div class="glass-hud p-3 rounded-xl border border-emerald-500/30 flex justify-between items-center">
+          <div><h4 class="font-bold text-white">برميل النفط</h4><p class="text-emerald-400 font-mono">$500</p></div>
+          <div class="flex gap-1.5"><button onclick="tradeResource('oil', 'buy', 500)" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg">شراء</button><button onclick="tradeResource('oil', 'sell', 500)" class="px-2.5 py-1 bg-amber-600 text-white rounded-lg">بيع</button></div>
+        </div>
+        <div class="glass-hud p-3 rounded-xl border border-emerald-500/30 flex justify-between items-center">
+          <div><h4 class="font-bold text-white">كيلوجرام يورانيوم</h4><p class="text-emerald-400 font-mono">$5,000</p></div>
+          <div class="flex gap-1.5"><button onclick="tradeResource('uranium', 'buy', 5000)" class="px-2.5 py-1 bg-emerald-600 text-white rounded-lg">شراء</button><button onclick="tradeResource('uranium', 'sell', 5000)" class="px-2.5 py-1 bg-amber-600 text-white rounded-lg">بيع</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INBOX MODAL -->
+  <div id="inbox-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex-col p-4 md:p-8 overflow-y-auto">
+    <div class="max-w-2xl w-full mx-auto space-y-4">
+      <div class="flex justify-between items-center border-b border-cyan-500/30 pb-3">
+        <h2 class="text-lg font-black text-white flex items-center gap-2"><i class="fa-solid fa-envelope text-amber-400"></i> صندوق البريد والرسائل</h2>
+        <button onclick="closeInboxModal()" class="px-3 py-1.5 bg-slate-800 text-white font-bold rounded-xl text-xs">إغلاق</button>
+      </div>
+      <div id="inbox-messages-list" class="space-y-2">
+        <div class="glass-hud p-3 rounded-xl border border-slate-700 text-xs text-slate-300">لا توجد رسائل جديدة حالياً.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ATTACK MODAL -->
+  <div id="attack-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex-col p-4 md:p-8 overflow-y-auto">
+    <div class="max-w-xs w-full mx-auto space-y-3 my-auto glass-hud p-4 rounded-2xl border border-red-500/40">
+      <h2 class="text-base font-black text-white"><i class="fa-solid fa-crosshairs text-red-500"></i> غرفة القصف العسكري</h2>
+      <button onclick="executeAnimatedAttack()" class="w-full py-2.5 bg-red-600 text-white font-extrabold rounded-xl text-xs">إطلاق الهجوم الصاروخي</button>
+      <button onclick="closeAttackModal()" class="w-full py-1.5 bg-slate-800 text-slate-300 font-bold rounded-lg text-xs">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- HELP MODAL -->
+  <div id="help-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex-col p-4 md:p-8 overflow-y-auto">
+    <div class="max-w-xs w-full mx-auto space-y-3 my-auto glass-hud p-4 rounded-2xl border border-emerald-500/40">
+      <h2 class="text-base font-black text-white"><i class="fa-solid fa-hand-holding-heart text-emerald-400"></i> إرسال مساعدات</h2>
+      <button onclick="sendAidWithVisualLine()" class="w-full py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs">تحويل $50,000 لتحسين العلاقات</button>
+      <button onclick="closeHelpModal()" class="w-full py-1.5 bg-slate-800 text-slate-300 font-bold rounded-lg text-xs">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- ESPIONAGE MODAL -->
+  <div id="espionage-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl hidden flex-col p-4 md:p-8 overflow-y-auto">
+    <div class="max-w-xs w-full mx-auto space-y-3 my-auto glass-hud p-4 rounded-2xl border border-purple-500/40">
+      <h2 class="text-base font-black text-white"><i class="fa-solid fa-user-secret text-purple-400"></i> جهاز الاستخبارات</h2>
+      <button onclick="executeSpyMission()" class="w-full py-2.5 bg-purple-600 text-white font-bold rounded-xl text-xs">إرسال طائرة استطلاع ($30,000)</button>
+      <button onclick="closeEspionageModal()" class="w-full py-1.5 bg-slate-800 text-slate-300 font-bold rounded-lg text-xs">إلغاء</button>
+    </div>
+  </div>
+
+  <script>
+    const neutralRegionNames = {
+      "Egypt": "جمهورية مصر والوادي", "United States of America": "الولايات المتحدة الأمريكية",
+      "China": "جمهورية الصين الشعبية", "Russia": "الاتحاد الروسي", "France": "الجمهورية الفرنسية",
+      "Germany": "جمهورية ألمانيا الاتحادية", "Saudi Arabia": "المملكة العربية السعودية",
+      "Algeria": "الجمهورية الجزائرية", "Brazil": "جمهورية البرازيل الاتحادية", "India": "جمهورية الهند"
+    };
+
+    let state = {
+      deviceType: 'pc',
+      isSetupMode: true, pendingSelection: null,
+      leaderName: "الجنرال", nationName: "الجمهورية الكبرى",
+      playerLat: 26.8, playerLng: 30.8, budget: 500000,
+      uncollectedTaxes: 0, steel: 100, concrete: 100, wood: 100, oil: 200, uranium: 10,
+      missiles: 2, infantry: 500, warships: 1, army: 900,
+      factories: { wood: 0, concrete: 0, steel: 0, uranium: 0, oil: 0, airDefense: 0 },
+      newsArchive: [], inboxMessages: [], countryLayers: {}, selectedCountry: null
+    };
+
+    let map;
+
+    // SAVE STATE TO LOCAL STORAGE
+    function saveGameState() {
+      if (state.leaderName) {
+        localStorage.setItem(`el_general_save_${state.leaderName}`, JSON.stringify(state));
+      }
+    }
+
+    // LOAD STATE FROM LOCAL STORAGE
+    function loadGameState(username) {
+      const saved = localStorage.getItem(`el_general_save_${username}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          state = { ...state, ...parsed };
+          return true;
+        } catch (e) { console.error(e); }
+      }
+      return false;
+    }
+
+    function selectDeviceType(type) {
+      state.deviceType = type;
+      const btnMobile = document.getElementById('dev-btn-mobile');
+      const btnPc = document.getElementById('dev-btn-pc');
+
+      if (type === 'mobile') {
+        btnMobile.className = 'py-2.5 rounded-xl border border-amber-500 bg-amber-500/30 text-amber-300 font-bold flex items-center justify-center gap-2';
+        btnPc.className = 'py-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-400 font-bold flex items-center justify-center gap-2';
+        document.body.className = 'relative w-full h-full device-mobile';
+      } else {
+        btnPc.className = 'py-2.5 rounded-xl border border-amber-500 bg-amber-500/30 text-amber-300 font-bold flex items-center justify-center gap-2';
+        btnMobile.className = 'py-2.5 rounded-xl border border-slate-700 bg-slate-900 text-slate-400 font-bold flex items-center justify-center gap-2';
+        document.body.className = 'relative w-full h-full device-pc';
+      }
+    }
+
+    function toggleMobileResources() {
+      const box = document.getElementById('hud-resources-box');
+      box.classList.toggle('hidden');
+    }
+
+    function handleAuthSubmit() {
+      const username = document.getElementById('auth-username').value.trim();
+      if (!username) return alert("أدخل اسم القائد!");
+      
+      state.leaderName = username;
+      const loaded = loadGameState(username);
+
+      document.getElementById('auth-modal').classList.add('hidden');
+
+      if (loaded && !state.isSetupMode) {
+        document.getElementById('hud-layer').classList.remove('hidden');
+        document.getElementById('tax-collector-btn').classList.remove('hidden');
+        document.getElementById('hud-nation-name').innerText = state.nationName;
+        updateHUD();
+      } else {
+        document.getElementById('setup-banner').classList.remove('hidden');
+      }
+    }
+
+    async function initMap() {
+      map = L.map('map', { center: [20.0, 15.0], zoom: 3, zoomControl: true, attributionControl: false });
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 17, minZoom: 2 }).addTo(map);
+
+      map.on('click', () => { document.getElementById('country-inspector').classList.add('hidden'); });
+
+      try {
+        const response = await fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json');
+        const geojsonData = await response.json();
+        L.geoJSON(geojsonData, {
+          style: (feature) => ({ fillColor: '#0284c7', weight: 1.2, opacity: 0.7, color: '#38bdf8', fillOpacity: 0.2 }),
+          onEachFeature: (feature, layer) => {
+            const metrics = calculateCountryMetrics(feature);
+            state.countryLayers[metrics.name] = { layer, feature, metrics };
+            layer.on({ click: (e) => { L.DomEvent.stopPropagation(e); handleCountryClick(feature, layer, e.latlng); } });
+          }
+        }).addTo(map);
+      } catch (e) {}
+    }
+
+    function calculateCountryMetrics(feature) {
+      const origName = feature.properties.name || "إقليم";
+      const neutralName = neutralRegionNames[origName] || `إقليم ${origName}`;
+      let hash = 0; for (let i = 0; i < origName.length; i++) hash = origName.charCodeAt(i) + ((hash << 5) - hash);
+      hash = Math.abs(hash);
+      const population = Math.floor((hash % 60000000) + 5000000);
+      const bounds = feature.geometry.type === "Polygon" ? feature.geometry.coordinates[0] : feature.geometry.coordinates[0][0];
+      return { name: neutralName, population: population.toLocaleString('ar-EG'), gdp: '$' + (population * 8).toLocaleString(), military: (Math.floor(population * 0.003) + 200).toLocaleString('ar-EG'), lat: bounds[0][1], lng: bounds[0][0] };
+    }
+
+    function handleCountryClick(feature, layer, latlng) {
+      const metrics = calculateCountryMetrics(feature);
+      if (state.isSetupMode) {
+        state.pendingSelection = { feature, layer, metrics };
+        document.getElementById('setup-selected-country-text').innerText = `لقد اخترت: ${metrics.name}`;
+        document.getElementById('setup-country-name').value = metrics.name;
+        document.getElementById('setup-modal').classList.remove('hidden'); document.getElementById('setup-modal').classList.add('flex');
+      } else {
+        state.selectedCountry = metrics;
+        document.getElementById('country-inspector').classList.remove('hidden');
+        document.getElementById('inspect-country-name').innerHTML = `<i class="fa-solid fa-globe text-cyan-400"></i> ${metrics.name}`;
+        document.getElementById('inspect-pop').innerText = metrics.population;
+        document.getElementById('inspect-gdp').innerText = metrics.gdp;
+        document.getElementById('inspect-military').innerText = metrics.military;
+      }
+    }
+
+    function confirmSetup() {
+      if (!state.pendingSelection) return;
+      const { metrics } = state.pendingSelection;
+      state.nationName = document.getElementById('setup-country-name').value.trim() || metrics.name;
+      state.playerLat = metrics.lat; state.playerLng = metrics.lng;
+      state.isSetupMode = false;
+      document.getElementById('setup-banner').classList.add('hidden');
+      document.getElementById('setup-modal').classList.add('hidden');
+      document.getElementById('hud-layer').classList.remove('hidden');
+      document.getElementById('tax-collector-btn').classList.remove('hidden');
+      document.getElementById('hud-nation-name').innerText = state.nationName;
+      updateHUD();
+      saveGameState();
+    }
+    function cancelSetupSelection() { document.getElementById('setup-modal').classList.add('hidden'); }
+
+    /* REALISTIC GAME LOOP */
+    setInterval(() => {
+      if (state.isSetupMode) return;
+      state.uncollectedTaxes += 2000;
+
+      if (state.factories.wood > 0) state.wood += state.factories.wood;
+      if (state.factories.concrete > 0) state.concrete += state.factories.concrete;
+      if (state.factories.steel > 0) state.steel += state.factories.steel;
+      if (state.factories.uranium > 0) state.uranium += state.factories.uranium;
+      if (state.factories.oil > 0) state.oil += state.factories.oil;
+
+      updateHUD();
+      saveGameState();
+    }, 1000);
+
+    function upgradeBuilding(type, cost) {
+      if (state.budget < cost) return alert("الميزانية غير كافية!");
+      state.budget -= cost;
+      state.factories[type] = (state.factories[type] || 0) + 1;
+      document.getElementById(`lvl-${type}`).innerText = state.factories[type];
+      updateHUD();
+      saveGameState();
+    }
+
+    function upgradeAirDefense() {
+      if (state.budget < 300000) return alert("الميزانية غير كافية!");
+      state.budget -= 300000;
+      state.factories.airDefense += 1;
+      document.getElementById('lvl-airdef').innerText = state.factories.airDefense;
+      updateHUD();
+      saveGameState();
+    }
+
+    function recruitUnit(type, cost, amount) {
+      if (state.budget < cost) return alert("الميزانية لا تكفي!");
+      state.budget -= cost;
+      if (type === 'infantry') state.infantry += amount;
+      updateHUD();
+      saveGameState();
+    }
+
+    function produceTacticalMissiles() {
+      if (state.budget < 100000 || state.steel < 50) return alert("تحتاج إلى 100,000$ و50 طن صلب!");
+      state.budget -= 100000; state.steel -= 50; state.missiles += 1;
+      updateHUD(); saveGameState();
+    }
+
+    function recruitWarships() {
+      if (state.budget < 150000) return alert("الميزانية لا تكفي!");
+      state.budget -= 150000; state.warships += 1;
+      updateHUD(); saveGameState();
+    }
+
+    function executeAnimatedAttack() {
+      closeAttackModal();
+      if (!state.selectedCountry) return alert("حدد دولة أولاً!");
+      const targetLat = state.selectedCountry.lat, targetLng = state.selectedCountry.lng;
+      const polyline = L.polyline([[state.playerLat, state.playerLng], [targetLat, targetLng]], { color: '#ef4444', weight: 3, className: 'attack-line' }).addTo(map);
+      setTimeout(() => { map.removeLayer(polyline); }, 3000);
+    }
+
+    function sendAidWithVisualLine() { closeHelpModal(); state.budget -= 50000; updateHUD(); saveGameState(); }
+    function executeSpyMission() { closeEspionageModal(); state.budget -= 30000; updateHUD(); saveGameState(); }
+
+    function tradeResource(type, mode, price) {
+      if (mode === 'buy') { if (state.budget < price) return alert("لا توجد ميزانية كافية!"); state.budget -= price; state[type] += 1; }
+      else { if (state[type] <= 0) return alert("لا تملك رصيد للبيع!"); state[type] -= 1; state.budget += price; }
+      updateHUD(); saveGameState();
+    }
+
+    function openTaxCollectorBanner() {
+      document.getElementById('tax-collector-total-text').innerText = '$' + state.uncollectedTaxes.toLocaleString();
+      document.getElementById('tax-slider').max = state.uncollectedTaxes;
+      document.getElementById('tax-slider').value = state.uncollectedTaxes;
+      document.getElementById('tax-custom-input').value = state.uncollectedTaxes;
+      document.getElementById('tax-collector-modal').classList.remove('hidden'); document.getElementById('tax-collector-modal').classList.add('flex');
+    }
+    function closeTaxCollectorBanner() { document.getElementById('tax-collector-modal').classList.add('hidden'); }
+    function syncTaxSliderValue(val) { document.getElementById('tax-custom-input').value = val; }
+    function syncTaxInputValue(val) { document.getElementById('tax-slider').value = Math.min(val, state.uncollectedTaxes); }
+    function confirmCollectTaxes() {
+      const amount = parseInt(document.getElementById('tax-custom-input').value) || 0;
+      state.uncollectedTaxes -= amount; state.budget += amount;
+      closeTaxCollectorBanner(); updateHUD(); saveGameState();
+    }
+
+    function updateHUD() {
+      state.army = state.infantry + (state.warships * 400);
+      document.getElementById('hud-budget').innerText = '$' + state.budget.toLocaleString();
+      document.getElementById('hud-steel').innerText = state.steel + ' طن';
+      document.getElementById('hud-concrete').innerText = state.concrete + ' طن';
+      document.getElementById('hud-wood').innerText = state.wood + ' طن';
+      document.getElementById('hud-uranium').innerText = state.uranium + ' كجم';
+      document.getElementById('hud-oil').innerText = state.oil + ' برميل';
+      document.getElementById('hud-missiles').innerText = state.missiles;
+      document.getElementById('hud-army').innerText = state.army.toLocaleString();
+      document.getElementById('tax-btn-amount').innerText = '$' + state.uncollectedTaxes.toLocaleString();
+    }
+
+    function openProductionPage() { document.getElementById('production-modal').classList.remove('hidden'); document.getElementById('production-modal').classList.add('flex'); }
+    function closeProductionPage() { document.getElementById('production-modal').classList.add('hidden'); }
+    function openMilitaryModal() { document.getElementById('military-modal').classList.remove('hidden'); document.getElementById('military-modal').classList.add('flex'); }
+    function closeMilitaryModal() { document.getElementById('military-modal').classList.add('hidden'); }
+    function openMarketModal() { document.getElementById('market-modal').classList.remove('hidden'); document.getElementById('market-modal').classList.add('flex'); }
+    function closeMarketModal() { document.getElementById('market-modal').classList.add('hidden'); }
+    function openInboxModal() { document.getElementById('inbox-modal').classList.remove('hidden'); document.getElementById('inbox-modal').classList.add('flex'); }
+    function closeInboxModal() { document.getElementById('inbox-modal').classList.add('hidden'); }
+    function openAttackModal() { document.getElementById('attack-modal').classList.remove('hidden'); document.getElementById('attack-modal').classList.add('flex'); }
+    function closeAttackModal() { document.getElementById('attack-modal').classList.add('hidden'); }
+    function openHelpModal() { document.getElementById('help-modal').classList.remove('hidden'); document.getElementById('help-modal').classList.add('flex'); }
+    function closeHelpModal() { document.getElementById('help-modal').classList.add('hidden'); }
+    function openEspionageModal() { document.getElementById('espionage-modal').classList.remove('hidden'); document.getElementById('espionage-modal').classList.add('flex'); }
+    function closeEspionageModal() { document.getElementById('espionage-modal').classList.add('hidden'); }
+
+    window.onload = () => { initMap(); };
+  </script>
+</body>
+</html>
